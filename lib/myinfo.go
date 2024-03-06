@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type myInfo struct {
@@ -16,34 +17,46 @@ type myInfo struct {
 }
 
 /*
-	Collect info about myself
+Collect info about myself
 */
+var getMyInfo = func() func() (*myInfo, error) {
+	var me *myInfo
+	var m sync.Mutex
 
-func getMyInfo() (*myInfo, error) {
-	cmd := os.Args[0]
-	cmd = filepath.Clean(cmd)
+	return func() (*myInfo, error) {
+		m.Lock()
+		defer m.Unlock()
+		if me != nil {
+			return me, nil
+		}
 
-	f, err := os.OpenFile(cmd, os.O_RDONLY, 0644)
-	if err != nil {
-		return nil, err
+		cmd := os.Args[0]
+		cmd = filepath.Clean(cmd)
+
+		f, err := os.OpenFile(cmd, os.O_RDONLY, 0644)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+
+		h := crc32.NewIEEE()
+
+		n, err := io.Copy(h, f)
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			return nil, errors.New("zero bytes for crc sum")
+		}
+
+		me = &myInfo{
+			size: n,
+			crc:  int64(h.Sum32()),
+		}
+
+		return me, nil
 	}
-	defer f.Close()
-
-	h := crc32.NewIEEE()
-
-	n, err := io.Copy(h, f)
-	if err != nil {
-		return nil, err
-	}
-	if n == 0 {
-		return nil, errors.New("zero bytes for crc sum")
-	}
-
-	return &myInfo{
-		size: n,
-		crc:  int64(h.Sum32()),
-	}, nil
-}
+}()
 
 // body, crc32 of it
 func getMyBody() (*bytes.Buffer, int64, error) {

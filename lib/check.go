@@ -65,6 +65,7 @@ func (u *ClientInfo) info() (*serverFileInfo, error) {
 	args.Add("key", u.Key)
 	args.Add("project", u.Project)
 	args.Add("branch", u.Branch)
+	args.Add("tmp", time.Now().String())
 
 	status, body, err := client.Post(nil, "https://"+u.Server+"//info", args)
 	if err != nil {
